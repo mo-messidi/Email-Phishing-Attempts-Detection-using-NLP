@@ -1,0 +1,269 @@
+{
+  "cells": [
+    {
+      "metadata": {
+        "_uuid": "494edde4dba713fe4b28c50ce7340240bcf82e3c"
+      },
+      "cell_type": "markdown",
+      "source": "\n# Phishing E-mails Attempts Prediction Based on Email Bodies\n\n###The Association of Computational Linguistics’ phishing email dataset. \n\nThis dataset of email bodies, in English, along with binary labels for each if is it genuine or a phishing attempt. After processing the text to word-vectors a dataset with …..features and …. entries was produced. The project objective was to build a model that could predict if an email is genuine communication or a phishing attempt based on the its body.\nFrom a business intelligence perspective, this dataset is interesting because of the value that a phishing prediction model can add to a many large enterprises. Having a system that automatically identifying phishing attempts can allow companies to save on expensive employee Cyber security awareness campaigns while still maintaining their desired level of cyber resilience. Also, from a techinical perspective, given that the dataset is entirely based on natural language, exploring the perfomance of various machine learing algorithms with this type of text based dataset can be very interesting.\n\n### Preprocessing and evaluation experiments\n\nThe universal performance metric used throughout this analysis is AUC (\"Area under the Receiver operating characteristic Curve”). AUC measures the entire two-dimensional area underneath the entire ROC curve which is curve of a model’s classification results based on various decision probability thresholds. It is a commonly used evaluation method for binary classification problems. Its main advantages over other evaluation methods is that it is not sensitive to skewed datasets like the ones explored here. This is because AUC considers both sensitivity (True Positives) of the results as well as the specificity (True Negatives). This ensures that the evaluated model can not only correctly classify positive labels but also correctly classify negative ones too."
+    },
+    {
+      "metadata": {
+        "_uuid": "298c6b145e3a81001db8e29192fac54d714ce226"
+      },
+      "cell_type": "markdown",
+      "source": "### Import python modules"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "3caae97a84a3ed5201e54da7ef225ea67fec5fa4"
+      },
+      "cell_type": "code",
+      "source": "import itertools\nimport time\nimport numpy as np\nimport pandas as pd\nimport os\nimport matplotlib.pyplot as plt\nfrom matplotlib import pyplot\nimport seaborn as sns\n\nfrom sklearn.model_selection import train_test_split\nfrom sklearn.model_selection import cross_val_score\nfrom sklearn.model_selection import GridSearchCV\n\nfrom sklearn.preprocessing import RobustScaler\n\nfrom sklearn import tree\nfrom sklearn.ensemble import AdaBoostClassifier\nfrom sklearn.neural_network import MLPClassifier\nfrom sklearn.neighbors import KNeighborsClassifier\nfrom sklearn.svm import SVC\n\nfrom sklearn.metrics import accuracy_score\nfrom sklearn.metrics import precision_score\nfrom sklearn.metrics import recall_score\nfrom sklearn.metrics import f1_score\nfrom sklearn.metrics import roc_curve\nfrom sklearn.metrics import auc\nfrom sklearn.metrics import confusion_matrix\nfrom sklearn.metrics import roc_auc_score\n\n\nfrom nltk.corpus import stopwords\nfrom sklearn.feature_extraction.text import TfidfVectorizer\nfrom sklearn.feature_extraction.text import CountVectorizer\n\nfrom IPython.display import Image",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "d03ef6b8b98a521b276a81ef00858adcef794601"
+      },
+      "cell_type": "markdown",
+      "source": "## Load data as pandas dataframe"
+    },
+    {
+      "metadata": {
+        "trusted": true,
+        "_uuid": "15b47d6cb7847aad226acac8e2ee3746bb700c18"
+      },
+      "cell_type": "code",
+      "source": "dataset = \"../input/fraud_email_.csv\"\ndata_df = pd.read_csv(dataset)\ndata_df = data_df.dropna()\ndata_df['Text'] = data_df['Text'].apply(lambda x: \" \".join(x.lower() for x in x.split()))\ndata_df['Text'] = data_df['Text'].str.replace('[^\\w\\s]','')\n\nstop = stopwords.words('english')\ndata_df['Text'] = data_df['Text'].apply(lambda x: \" \".join(x for x in x.split() if x not in stop))\n\n\nfrom sklearn.feature_extraction.text import TfidfVectorizer\ncorpus = data_df['Text']\nvectorizer = TfidfVectorizer()\nX = vectorizer.fit_transform(corpus)\n\n\nprint(X.shape)",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "37c4d128b4c50a4e3043f1bfbcc1a04dbfd6386b"
+      },
+      "cell_type": "markdown",
+      "source": "## Exploratory Data Analysis\n"
+    },
+    {
+      "metadata": {
+        "trusted": false,
+        "_uuid": "b276c05f547d7634dec7f83b9acf95689e10ff3c"
+      },
+      "cell_type": "code",
+      "source": "data_df.head()",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": false,
+        "_uuid": "98fff37358f2ca079ee9fe8ed3370656062e0ebe"
+      },
+      "cell_type": "code",
+      "source": "data_df.info()",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": false,
+        "_uuid": "71a4947307aca1cc71860b5c5f2bdd7475117f8e"
+      },
+      "cell_type": "code",
+      "source": "data_df.describe()",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "4bc06be4a5342ee82a8ebf84606e18b6e90ef71f"
+      },
+      "cell_type": "markdown",
+      "source": ""
+    },
+    {
+      "metadata": {
+        "_uuid": "08beb11964ea3106bc512456b84761adb2f03713"
+      },
+      "cell_type": "markdown",
+      "source": "## Training, Testing, Validation Set Split\n\n50% training, 25% testing, 25% validation"
+    },
+    {
+      "metadata": {
+        "trusted": false,
+        "_uuid": "e48552ef28a35380957702c6c7889cd212602392"
+      },
+      "cell_type": "code",
+      "source": "data_df = data_df.dropna()\n\nstopset = set(stopwords.words(\"english\"))\nvectorizer = TfidfVectorizer(stop_words = stopset, norm='l2', decode_error='ignore',binary=True)\nfeatures = vectorizer.fit_transform(data_df[\"Text\"])\n\n\nprint(features.shape[:])\n\ntrain_X, test_X, train_y, test_y = train_test_split(X, data_df[\"Class\"], test_size=0.5, stratify=data_df[\"Class\"])",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "d6c95ab0caae15db19e6761989159c79b97b899f"
+      },
+      "cell_type": "markdown",
+      "source": "## Decision Trees\n\nDecision Trees are a supervised learning method that is used for classification. It attempts to effiently filter input features using a series of simple rule based splits inorder to identify the correct output label. One way to select the best feature and/or threshold to split the data is by constantly selecting the split that will maximize information gain in a divide and conquer fashion.\n\n### Hyper-parameter tuning\n\nFirst, several decision tree classifiers were built with various settings of the maximum tree depth hyper-parameter. The figure shows the AUC estimate of the decision tree models with varying tree depth. It can be seen that during training as the tree depth increases the model performance also increases; however, during testing a cutoff tree depth can be observed where the model performance stops improving and starts to decrease. The models to the left of the cutoff are said to be underfitted models that do not predict efficiently because they all excessively simple architecture. One the other hand, models to the right of the cutoff are said to be overfitted models that so do not predict most efficiently because they tailored too much to their own training set."
+    },
+    {
+      "metadata": {
+        "trusted": false,
+        "_uuid": "97d036ed444ff9259953e8b2cf9212ba5e55e0a7"
+      },
+      "cell_type": "code",
+      "source": "max_depth = 30\ntree_auc_train, tree_auc_test = np.zeros(max_depth), np.zeros(max_depth)\ntraining_time, prediction_time = np.zeros(max_depth), np.zeros(max_depth)\nfor i in range(1,max_depth):\n    clf_decision_tree = tree.DecisionTreeClassifier(max_depth=i, criterion='entropy',random_state=1)\n    t0=time.clock()\n    clf_decision_tree = clf_decision_tree.fit(train_X, train_y)\n    training_time[i] = round(time.clock()-t0, 3)\n    tree_auc_train[i] = roc_auc_score(train_y, clf_decision_tree.predict_proba(train_X)[:,1])\n    t1=time.clock()\n    tree_auc_test[i] = roc_auc_score(test_y, clf_decision_tree.predict_proba(test_X)[:,1])\n    prediction_time[i] = round(time.clock()-t1, 3)\n\n\nfrom matplotlib import pyplot\npyplot.plot(tree_auc_train, linewidth=3, label = \"Decision tree train AUC\")\npyplot.plot(tree_auc_test, linewidth=3, label = \"Decision tree test AUC\")\npyplot.legend()\npyplot.ylim(0.8, 1.0)\npyplot.xlabel(\"Max_depth\")\npyplot.ylabel(\"validation auc\")\npyplot.figure(figsize=(12,12))\npyplot.savefig('churn_treedepth_fig2')\npyplot.show()\n\npyplot.plot(training_time, linewidth=3, label = \"Decision tree training time\")\npyplot.plot(prediction_time, linewidth=3, label = \"Decision tree prediction time\")\npyplot.legend()\npyplot.xlabel(\"Max_depth\")\npyplot.ylabel(\"time (sec)\")\npyplot.figure(figsize=(12,12))\npyplot.savefig('churn_treedepth_time_fig2')\npyplot.show()\n",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": false,
+        "_uuid": "c829573d5cdb9ce65c887f982ec647c0571086b3"
+      },
+      "cell_type": "code",
+      "source": "print(\"Best tree depth training: \" + str(np.argmax(tree_auc_train, axis=0)))\nprint(\"Highest AUC score training: \" + str(np.max(tree_auc_train, axis=0)))\nprint(\"Best tree depth testing: \" + str(np.argmax(tree_auc_test, axis=0)))\nprint(\"Highest AUC score testing: \" +  str(np.max(tree_auc_test, axis=0)))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "ad3ba4de651764090e3b862cb65da28236d03686"
+      },
+      "cell_type": "markdown",
+      "source": "### Decision tree pruning\n\nAfter the optimal tree depth parameter was identified, A decision tree classifier with that depth was built for each dataset and then each of the trees was pruned to analyze the how that can affect the classification performance.\n\nTree pruning is reducing the size of a decision tree by removing sections of the tree that provide little power to classify samples. It reduces the complexity of the final classifier, and hence improves predictive accuracy by the reduction of overfitting.\n\nTable 1 shows the AUC estimates of the decision tree classifier before and after pruning. It can be seen that that tree pruning had little effect on the classification performance. One possible expiation for the lack of significant performance improvement is that optimizing the tree depth parameter could be seen an indirect form of tree pruning since limiting tree depth also means limiting the number of duplicate leaves."
+    },
+    {
+      "metadata": {
+        "trusted": false,
+        "_uuid": "352fb93cd4266067170f956e54a0151c67496287"
+      },
+      "cell_type": "code",
+      "source": "from sklearn.tree._tree import TREE_LEAF\n\ndef is_leaf(inner_tree, index):\n    # Check whether node is leaf node\n    return (inner_tree.children_left[index] == TREE_LEAF and \n            inner_tree.children_right[index] == TREE_LEAF)\n\ndef prune_index(inner_tree, decisions, index=0):\n    # Start pruning from the bottom - if we start from the top, we might miss\n    # nodes that become leaves during pruning.\n    # Do not use this directly - use prune_duplicate_leaves instead.\n    if not is_leaf(inner_tree, inner_tree.children_left[index]):\n        prune_index(inner_tree, decisions, inner_tree.children_left[index])\n    if not is_leaf(inner_tree, inner_tree.children_right[index]):\n        prune_index(inner_tree, decisions, inner_tree.children_right[index])\n\n    # Prune children if both children are leaves now and make the same decision:     \n    if (is_leaf(inner_tree, inner_tree.children_left[index]) and\n        is_leaf(inner_tree, inner_tree.children_right[index]) and\n        (decisions[index] == decisions[inner_tree.children_left[index]]) and \n        (decisions[index] == decisions[inner_tree.children_right[index]])):\n        # turn node into a leaf by \"unlinking\" its children\n        inner_tree.children_left[index] = TREE_LEAF\n        inner_tree.children_right[index] = TREE_LEAF\n        print(\"Pruned {}\".format(index))\n\ndef prune_duplicate_leaves(mdl):\n    # Remove leaves if both \n    decisions = mdl.tree_.value.argmax(axis=2).flatten().tolist() # Decision for each node\n    prune_index(mdl.tree_, decisions)\n\n# plot_tree(clf, features)\n# tree.export_graphviz(clf,out_file='tree.dot',class_names=['No','Yes'],feature_names=features, \n#                      filled=True, rounded=True, special_characters=True, proportion=True)\n# os.system(\"dot -Tpng tree.dot -o tree.png\")\n# os.system(\"tree.png\")\n# # Note : Uncoverted Quotes (Yes) and Converted quotes (No)\n# Image(filename='tree.png')\n\n\nclf_decision_tree = tree.DecisionTreeClassifier(max_depth=i, criterion='entropy',random_state=1)\nclf_decision_tree = clf_decision_tree.fit(train_X, train_y)\nprune_duplicate_leaves(clf_decision_tree)\n    \ntree_auc_train_pruned = roc_auc_score(train_y, clf_decision_tree.predict_proba(train_X)[:,1])\ntree_auc_test_pruned = roc_auc_score(test_y, clf_decision_tree.predict_proba(test_X)[:,1])\n\nprint(\"pruned decision tree training: \" + str(tree_auc_train_pruned))\nprint(\"pruned decision tree testing: \" + str(tree_auc_test_pruned))\n\n# plot_tree(clf, features)\n# tree.export_graphviz(clf,out_file='tree_pruned.dot',class_names=['No','Yes'],feature_names=features, \n#                          filled=True, rounded=True, special_characters=True, proportion=True)\n# os.system(\"dot -Tpng tree_pruned.dot -o tree_pruned.png\")\n# os.system(\"tree_pruned.png\")\n# # Note : Uncoverted Quotes (Yes) and Converted quotes (No)\n# Image(filename='tree_pruned.png')\n",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "b8a424dc3c47393f513f0831e53ca05159699ddd"
+      },
+      "cell_type": "markdown",
+      "source": "## Boosting\n\nGradient boosting produces a prediction model in the form of an ensemble of weak learning prediction models. It builds all the weak learning models in a stage-wise fashion and assigns a weight to each of them. Then that weight is optimized by comparing the predicted results to the actual labels and then modifying the model weights using a loss function.\n\nThe boosting algorithm that was implemented for this analysis was the Adaboosting algorithm and the weak learning that was selected was the pruned decision tree that produced the best performance in the decision tree section.\n\n### Hyperparameter tuning.\n\nFor a boosting algorithm, the main parameters to explore are the type and number of weak learners the algorithm is built with. Since an optimized weak learning model has already been analyzed and selected in the decision tree section, only the effect of varying number of weak learners on the performance of the boosting algorithm was a studied.\n\nThe figure shows the AUC estimate of the adaboosting models with various numbers of weak learners.  It can be seen that during training as the number of weak learners increases the model performance also increases; however, during testing a cutoff number of weak learners can be observed where the model performance stops improving and starts to show signs of overfitting similar to what was observed in the previous section. "
+    },
+    {
+      "metadata": {
+        "trusted": false,
+        "_uuid": "26e35b9a3364b36d2de0dfd7640783005379c3ff"
+      },
+      "cell_type": "code",
+      "source": "max_depth = 30\nadaboost_auc_train, adaboost_auc_test = np.zeros(max_depth), np.zeros(max_depth)\ntraining_time, prediction_time = np.zeros(max_depth), np.zeros(max_depth)\nfor i in range(1,max_depth):\n    clf_adaboost = AdaBoostClassifier(base_estimator=tree.DecisionTreeClassifier(max_depth=i,criterion='entropy'), n_estimators=10, random_state=1)\n    t0 = time.clock()\n    clf_adaboost = clf_adaboost.fit(train_X, train_y)\n    training_time[i] = round(time.clock()-t0, 3)\n    adaboost_auc_train[i] = roc_auc_score(train_y, clf_adaboost.predict_proba(train_X)[:,1])\n    t1 = time.clock()\n    adaboost_auc_test[i] = roc_auc_score(test_y, clf_adaboost.predict_proba(test_X)[:,1])\n    prediction_time[i] = round(time.clock()-t1, 3)\n    \npyplot.plot(adaboost_auc_train, linewidth=3, label = \"Adaboost train AUC\")\npyplot.plot(adaboost_auc_test, linewidth=3, label = \"Adaboost test AUC\")\npyplot.legend()\npyplot.ylim(0.9, 1.0)\npyplot.xlabel(\"Max Depth of Weak Learners\")\npyplot.ylabel(\"Validation AUC\")\npyplot.figure(figsize=(12,12))\npyplot.savefig('churn_boosting_fig4')\npyplot.show()\n\npyplot.plot(training_time, linewidth=3, label = \"Adaboost training time\")\npyplot.plot(prediction_time, linewidth=3, label = \"Adoboost tree prediction time\")\npyplot.legend()\npyplot.xlabel(\"Max_depth\")\npyplot.ylabel(\"Time (sec)\")\npyplot.figure(figsize=(12,12))\npyplot.savefig('churn_boosting_time_fig2')\npyplot.show()\n\nprint(\"Best weak learner tree depth training: \" + str(np.argmax(adaboost_auc_train, axis=0)))\nprint(\"Highest AUC score training: \" + str(np.max(adaboost_auc_train, axis=0)))\nprint(\"Best weak learner tree depth testing: \" + str(np.argmax(adaboost_auc_test, axis=0)))\nprint(\"Highest AUC score testing: \" +  str(np.max(adaboost_auc_test, axis=0)))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "dfd0e6929de954604005570bb13fa2c430761ce7"
+      },
+      "cell_type": "markdown",
+      "source": "## Neural Networks\n\nA neural network is a supervised machine learning method that is roughly based on neural connections in biological entities. In its most simple form, input data features are fed into one end of the network where, at each node, they multiplied by an assigned weight value and passed through a certain simple function, called an activation function. This process is then repeated for some number of layers of nodes to form complex logic functions that attempt to describe the training input to labels mapping. The final layer of the network is the output layer where the final classification is produced. During training the network output classification is compared to the true label and then all the weights throughout the entire networks is adjusted based on some calculated loss value. \n\nThe process of passing instance data through a neural network from the input to the output layers as described above is called feedforwarding and the process of calculating the loss value at the output layer side and adjusting the assigned network weights all way back to the input layer is called backpropagation.\n\nThe neural network built for this analysis is a simple network consisting of only 3 layers. An input layer, one hidden layer and an output layer. The initial network weights are assigned randomly and the activation function at each network node is the ReLu function. For calulating the loss …….. Is used and a method called gradient decent is employed where ……\n\n### Hyperparameter tuning\n\nSince neural networks are highly modular, a large number of architectures can possibly be explored along with their own hyperparameters. For this analysis only the affects of varying the learning rate parameter was analyzed"
+    },
+    {
+      "metadata": {
+        "trusted": false,
+        "_uuid": "dee3a218a177bdcda64d74bb8f6be1d3eb4f1734"
+      },
+      "cell_type": "code",
+      "source": "learning_rate = [0.0001, 0.001, 0.01, 0.1, 1, 10]\ntraining_time, prediction_time = [],[]\nnn_auc_train, nn_auc_test = [],[]\nfor rate in learning_rate:\n    clf_nn = MLPClassifier(learning_rate_init=rate, random_state=1)\n    t0 = time.clock()\n    clf_nn = clf_nn.fit(train_X, train_y)\n    training_time.append(round(time.clock()-t0, 3))\n    nn_auc_train.append(roc_auc_score(train_y, clf_nn.predict_proba(train_X)[:,1]))\n    t1 = time.clock()\n    nn_auc_test.append(roc_auc_score(test_y, clf_nn.predict_proba(test_X)[:,1]))\n    prediction_time.append(round(time.clock()-t1, 3))\n\npyplot.plot(nn_auc_train, linewidth=3, label = \"Neural Network train AUC\")\npyplot.plot(nn_auc_test, linewidth=3, label = \"Neural Network test AUC\")\npyplot.legend()\npyplot.ylim(8.0, 1.0)\npyplot.xlabel(\"Learning Rate\")\npyplot.ylabel(\"Validation AUC\")\npyplot.savefig('churn_neural_network_fig')\npyplot.show()\n\npyplot.plot(training_time, linewidth=3, label = \"Neural Network training time\")\npyplot.plot(prediction_time, linewidth=3, label = \"Neural Network prediction time\")\npyplot.legend()\npyplot.xlabel(\"Learning Rate\")\npyplot.ylabel(\"Time (sec)\")\npyplot.figure(figsize=(12,12))\npyplot.savefig('churn_nn_time_fig')\npyplot.show()\n\nprint(\"Best earning rate training: \" + str(np.argmax(nn_auc_train, axis=0)))\nprint(\"Highest AUC score training: \" + str(np.max(nn_auc_train, axis=0)))\nprint(\"Best learning rate testing: \" + str(np.argmax(nn_auc_test, axis=0)))\nprint(\"Highest AUC score testing: \" +  str(np.max(nn_auc_test, axis=0)))",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "ba8a2aef0ed9b70cd1ef70a34759c358d8b9847f"
+      },
+      "cell_type": "markdown",
+      "source": "## k-Nearest Neighbors\n\nK- nearest neighbors is another supervised machine learning method that is used for classification. Unlike all the other methods discussed in this analysis that are ……learning methods, k-nearest neighbors is an instance-based learning method, also called a lazy learning method. Instead of attempting find a function/method that maps the all the input training instances to their correct labels instance based learners attempt to classify instances solely based on the classification of the most similar instance in the true labeled training set. In K-NN an instance in classified based on the labels of the “K” closet neighboring training instances to it.\n\nCompared to ….. learning methods, instance based learning is trained much faster, however, prediction time is slower because most of the algorithm computations are pushed to the prediction phase instead of the learning phase, hence the term “lazy” learner.\n\n### Hyperparameter tuning.\n\nThe prediction results of a K-NN algorithm can be heavily dependent of the parameters selected. For this reason, domain knowledge is preferred when using this type of classifier. For this analysis, the minimum numbers of neighbors required to classify an entry was analyzed was well as the type of distance calculation used to calculate the those K neighbors. All neighbors were given equal importance weights and ………"
+    },
+    {
+      "metadata": {
+        "trusted": false,
+        "_uuid": "0a92e8fc01332c2e497afee3e8c0cc80a64da977"
+      },
+      "cell_type": "code",
+      "source": "max_k = 10\nknn_auc_train, knn_auc_test = np.zeros(max_k), np.zeros(max_k)\ntraining_time, prediction_time = np.zeros(max_k), np.zeros(max_k)\nfor i in range(1,max_k):\n    clf_knn = KNeighborsClassifier(n_neighbors=i, algorithm='auto', leaf_size=30, metric='minkowski',\n           metric_params=None, n_jobs=-1, p=2, weights='uniform')\n    t0 = time.clock()\n    clf_knn = clf_knn.fit(train_X, train_y)\n    training_time[i] = round(time.clock()-t0, 3)\n    pred_train = clf_knn.predict_proba(train_X)[:,1]\n    t1 = time.clock()\n    pred_test = clf_knn.predict_proba(test_X)[:,1]\n    prediction_time[i] = round(time.clock()-t1, 3)\n    knn_auc_train[i] = roc_auc_score(train_y, pred_train)\n    knn_auc_test[i] = roc_auc_score(test_y, pred_test)\n\npyplot.plot(knn_auc_train, linewidth=3, label = \"KNN train AUC\")\npyplot.plot(knn_auc_test, linewidth=3, label = \"KNN test AUC\")\npyplot.legend()\npyplot.ylim(0.7, 1.0)\npyplot.xlabel(\"K Nearest Neighbors - Euclidean\")\npyplot.ylabel(\"Validation AUC\")\npyplot.figure(figsize=(12,12))\npyplot.savefig('churn_knn_fig6')\npyplot.show()\n\npyplot.plot(training_time, linewidth=3, label = \"KNN training time\")\npyplot.plot(prediction_time, linewidth=3, label = \"KNN prediction time\")\npyplot.legend()\npyplot.xlabel(\"K Nearest Neighbors - Euclidean\")\npyplot.ylabel(\"Time (sec)\")\npyplot.figure(figsize=(12,12))\npyplot.savefig('churn_Knn_time_fig')\npyplot.show()\n\nprint(\"Best number of neighbors training: \" + str(np.argmax(knn_auc_train, axis=0)))\nprint(\"Highest AUC score training: \" + str(np.max(knn_auc_train, axis=0)))\nprint(\"Best number of neighbors testing: \" + str(np.argmax(knn_auc_test, axis=0)))\nprint(\"Highest AUC score testing: \" +  str(np.max(knn_auc_test, axis=0)))\n\n\n    \n    ",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "_uuid": "c8c0676068c4378dff06d0c6f2109b27429a3e7b"
+      },
+      "cell_type": "markdown",
+      "source": "## Support Vector Machines (SVM)"
+    },
+    {
+      "metadata": {
+        "trusted": false,
+        "_uuid": "15fb86e2450e153446c9fdd8abb8254c38ad97ec"
+      },
+      "cell_type": "code",
+      "source": "clf_svm_linear = SVC(kernel='linear', probability=True, random_state=1)\nt0 = time.clock()\nclf_svm_linear.fit(train_X, train_y)\ntraining_time_linear = round(time.clock()-t0, 3)\npred_train_linear = clf_svm_linear.predict_proba(train_X)[:,1]\nt1 = time.clock()\npred_test_linear = clf_svm_linear.predict_proba(test_X)[:,1]\nprediction_time_linear = round(time.clock()-t1, 3)\nsvm_auc_train_linear = roc_auc_score(train_y, pred_train_linear)\nsvm_auc_test_linear = roc_auc_score(test_y, pred_test_linear)\n\nclf_svm_rbf = SVC(kernel='rbf',probability=True, random_state=1)\nt0 = time.clock()\nclf_svm_rbf.fit(train_X, train_y)\ntraining_time_rbf = round(time.clock() - t0, 3)\npred_train_rbf = clf_svm_rbf.predict_proba(train_X)[:,1]\nt1= time.clock()\npred_test_rbf = clf_svm_rbf.predict_proba(test_X)[:,1]\nprediction_time_rbf = round(time.clock() - t1, 3)\nsvm_auc_train_rbf = roc_auc_score(train_y, pred_train_rbf)\nsvm_auc_test_rbf = roc_auc_score(test_y, pred_test_rbf)\n\nprint(\"Linear kernel training AUC: \" + str(svm_auc_train_linear))\nprint(\"Linear kernel testing AUC: \" + str(svm_auc_test_linear))\nprint(\"rbf kernel training AUC: \" + str(svm_auc_train_rbf))\nprint(\"rbf kernel testing AUC: \" + str(svm_auc_test_rbf))\n\nprint(\"Linear kernel training time: \" + str(training_time_linear))\nprint(\"Linear kernel prediction tim: \" + str(prediction_time_linear))\nprint(\"rbf kernel training time: \" + str(training_time_rbf))\nprint(\"rbf kernel prediction tim: \" + str(prediction_time_rbf))\n                             \n",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": false,
+        "_uuid": "65263973daf3aa0198c2c065b39c02c5f9e18669"
+      },
+      "cell_type": "code",
+      "source": "## Model Comparison",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": false,
+        "_uuid": "8a68aaee22dc16b97fb6ed08655edf03a4d0c33b"
+      },
+      "cell_type": "code",
+      "source": "from sklearn.model_selection import learning_curve\n\n\ndef plot_learning_curve(estimator, title, X, y, ylim=None, cv=None,\n                        n_jobs=None, train_sizes=np.linspace(.1, 1.0, 5)):\n\n    plt.figure()\n    plt.title(title)\n    if ylim is not None:\n        plt.ylim(*ylim)\n    plt.xlabel(\"Training examples\")\n    plt.ylabel(\"Score\")\n    train_sizes, train_scores, test_scores = learning_curve(\n        estimator, X, y, cv=cv, n_jobs=n_jobs, train_sizes=train_sizes)\n    train_scores_mean = np.mean(train_scores, axis=1)\n    train_scores_std = np.std(train_scores, axis=1)\n    test_scores_mean = np.mean(test_scores, axis=1)\n    test_scores_std = np.std(test_scores, axis=1)\n    plt.grid()\n\n    plt.fill_between(train_sizes, train_scores_mean - train_scores_std,\n                     train_scores_mean + train_scores_std, alpha=0.1,\n                     color=\"r\")\n    plt.fill_between(train_sizes, test_scores_mean - test_scores_std,\n                     test_scores_mean + test_scores_std, alpha=0.1, color=\"g\")\n    plt.plot(train_sizes, train_scores_mean, 'o-', color=\"r\",\n             label=\"Training score\")\n    plt.plot(train_sizes, test_scores_mean, 'o-', color=\"g\",\n             label=\"Cross-validation score\")\n\n    plt.legend(loc=\"best\")\n    return plt\n\nX, y = train_X, train_y\n\n\ntitle = \"Learning Curves (Decision Tree)\"\nestimator = tree.DecisionTreeClassifier(max_depth=11, criterion='entropy',random_state=1)\nplot_learning_curve(estimator, title, X, y, ylim=(0.9,1.0), cv=None, n_jobs=-1)\n\nplt.show()\ntitle = \"Learning Curves (Adaboost)\"\nestimator = AdaBoostClassifier(base_estimator=tree.DecisionTreeClassifier(max_depth=5,criterion='entropy'), n_estimators=10,random_state=1)\nplot_learning_curve(estimator, title, X, y, ylim=(0.9, 1.0), cv=None, n_jobs=-1)\n\nplt.show()\ntitle = \"Learning Curves (Neural Network)\"\nestimator = MLPClassifier()\nplot_learning_curve(estimator, title, X, y, ylim=(0.93, 1.0), cv=None, n_jobs=-1)\n\nplt.show()\ntitle = \"Learning Curves (K-NN)\"\nestimator = KNeighborsClassifier(n_neighbors=1, algorithm='auto', leaf_size=30, metric='minkowski',\n           metric_params=None, n_jobs=-1, p=2, weights='uniform')\nplot_learning_curve(estimator, title, X, y, ylim=(0.6, 1.0), cv=None, n_jobs=-1)\n\ntitle = \"Learning Curves (SVM)\"\nestimator = SVC(kernel='linear',probability=True, random_state=1)\nplot_learning_curve(estimator, title, X, y, ylim=(0.92, 1.0), cv=None, n_jobs=-1)\n\nplt.show()\n",
+      "execution_count": null,
+      "outputs": []
+    },
+    {
+      "metadata": {
+        "trusted": false,
+        "_uuid": "134608118b2a07b97517b7ca9a1cbff9f4728e5c"
+      },
+      "cell_type": "code",
+      "source": "",
+      "execution_count": null,
+      "outputs": []
+    }
+  ],
+  "metadata": {
+    "kernelspec": {
+      "display_name": "Python 3",
+      "language": "python",
+      "name": "python3"
+    },
+    "language_info": {
+      "name": "python",
+      "version": "3.6.6",
+      "mimetype": "text/x-python",
+      "codemirror_mode": {
+        "name": "ipython",
+        "version": 3
+      },
+      "pygments_lexer": "ipython3",
+      "nbconvert_exporter": "python",
+      "file_extension": ".py"
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 1
+}
